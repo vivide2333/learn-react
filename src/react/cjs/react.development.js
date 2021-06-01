@@ -14,12 +14,9 @@ if (process.env.NODE_ENV !== "production") {
 'use strict';
 
 var _assign = require('object-assign');
+
 // TODO: this is special because it gets imported during build.
-//
-// TODO: 17.0.3 has not been released to NPM;
-// It exists as a placeholder so that DevTools can support work tag changes between releases.
-// When we next publish a release (either 17.0.3 or 17.1.0), update the matching TODO in backend/renderer.js
-var ReactVersion = '17.0.3';
+var ReactVersion = '17.0.0';
 
 // ATTENTION
 // When adding new symbols to this file,
@@ -35,15 +32,17 @@ var REACT_PROVIDER_TYPE = 0xeacd;
 var REACT_CONTEXT_TYPE = 0xeace;
 var REACT_FORWARD_REF_TYPE = 0xead0;
 exports.Suspense = 0xead1;
-exports.SuspenseList = 0xead8;
+exports.unstable_SuspenseList = 0xead8;
 var REACT_MEMO_TYPE = 0xead3;
 var REACT_LAZY_TYPE = 0xead4;
+var REACT_BLOCK_TYPE = 0xead9;
+var REACT_SERVER_BLOCK_TYPE = 0xeada;
+var REACT_FUNDAMENTAL_TYPE = 0xead5;
 var REACT_SCOPE_TYPE = 0xead7;
 var REACT_OPAQUE_ID_TYPE = 0xeae0;
 exports.unstable_DebugTracingMode = 0xeae1;
 var REACT_OFFSCREEN_TYPE = 0xeae2;
 exports.unstable_LegacyHidden = 0xeae3;
-exports.unstable_Cache = 0xeae4;
 
 if (typeof Symbol === 'function' && Symbol.for) {
   var symbolFor = Symbol.for;
@@ -56,15 +55,17 @@ if (typeof Symbol === 'function' && Symbol.for) {
   REACT_CONTEXT_TYPE = symbolFor('react.context');
   REACT_FORWARD_REF_TYPE = symbolFor('react.forward_ref');
   exports.Suspense = symbolFor('react.suspense');
-  exports.SuspenseList = symbolFor('react.suspense_list');
+  exports.unstable_SuspenseList = symbolFor('react.suspense_list');
   REACT_MEMO_TYPE = symbolFor('react.memo');
   REACT_LAZY_TYPE = symbolFor('react.lazy');
+  REACT_BLOCK_TYPE = symbolFor('react.block');
+  REACT_SERVER_BLOCK_TYPE = symbolFor('react.server.block');
+  REACT_FUNDAMENTAL_TYPE = symbolFor('react.fundamental');
   REACT_SCOPE_TYPE = symbolFor('react.scope');
   REACT_OPAQUE_ID_TYPE = symbolFor('react.opaque.id');
   exports.unstable_DebugTracingMode = symbolFor('react.debug_trace_mode');
   REACT_OFFSCREEN_TYPE = symbolFor('react.offscreen');
   exports.unstable_LegacyHidden = symbolFor('react.legacy_hidden');
-  exports.unstable_Cache = symbolFor('react.cache');
 }
 
 var MAYBE_ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
@@ -447,30 +448,16 @@ function createRef() {
   return refObject;
 }
 
-var isArrayImpl = Array.isArray; // eslint-disable-next-line no-redeclare
-
-function isArray(a) {
-  return isArrayImpl(a);
-}
-
 function getWrappedName(outerType, innerType, wrapperName) {
-  var displayName = outerType.displayName;
-
-  if (displayName) {
-    return displayName;
-  }
-
   var functionName = innerType.displayName || innerType.name || '';
-  return functionName !== '' ? wrapperName + "(" + functionName + ")" : wrapperName;
-} // Keep in sync with react-reconciler/getComponentNameFromFiber
-
+  return outerType.displayName || (functionName !== '' ? wrapperName + "(" + functionName + ")" : wrapperName);
+}
 
 function getContextName(type) {
   return type.displayName || 'Context';
-} // Note that the reconciler package should generally prefer to use getComponentNameFromFiber() instead.
+}
 
-
-function getComponentNameFromType(type) {
+function getComponentName(type) {
   if (type == null) {
     // Host root, text node or just invalid type.
     return null;
@@ -478,7 +465,7 @@ function getComponentNameFromType(type) {
 
   {
     if (typeof type.tag === 'number') {
-      error('Received an unexpected object in getComponentNameFromType(). ' + 'This is likely a bug in React. Please file an issue.');
+      error('Received an unexpected object in getComponentName(). ' + 'This is likely a bug in React. Please file an issue.');
     }
   }
 
@@ -506,11 +493,8 @@ function getComponentNameFromType(type) {
     case exports.Suspense:
       return 'Suspense';
 
-    case exports.SuspenseList:
+    case exports.unstable_SuspenseList:
       return 'SuspenseList';
-
-    case exports.unstable_Cache:
-      return 'Cache';
   }
 
   if (typeof type === 'object') {
@@ -527,13 +511,10 @@ function getComponentNameFromType(type) {
         return getWrappedName(type, type.render, 'ForwardRef');
 
       case REACT_MEMO_TYPE:
-        var outerName = type.displayName || null;
+        return getComponentName(type.type);
 
-        if (outerName !== null) {
-          return outerName;
-        }
-
-        return getComponentNameFromType(type.type) || 'Memo';
+      case REACT_BLOCK_TYPE:
+        return getComponentName(type._render);
 
       case REACT_LAZY_TYPE:
         {
@@ -542,7 +523,7 @@ function getComponentNameFromType(type) {
           var init = lazyComponent._init;
 
           try {
-            return getComponentNameFromType(init(payload));
+            return getComponentName(init(payload));
           } catch (x) {
             return null;
           }
@@ -554,7 +535,6 @@ function getComponentNameFromType(type) {
 }
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
-
 var RESERVED_PROPS = {
   key: true,
   ref: true,
@@ -634,7 +614,7 @@ function defineRefPropWarningGetter(props, displayName) {
 function warnIfStringRefCannotBeAutoConverted(config) {
   {
     if (typeof config.ref === 'string' && ReactCurrentOwner.current && config.__self && ReactCurrentOwner.current.stateNode !== config.__self) {
-      var componentName = getComponentNameFromType(ReactCurrentOwner.current.type);
+      var componentName = getComponentName(ReactCurrentOwner.current.type);
 
       if (!didWarnAboutStringRefs[componentName]) {
         error('Component "%s" contains the string ref "%s". ' + 'Support for string refs will be removed in a future major release. ' + 'This case cannot be automatically converted to an arrow function. ' + 'We ask you to manually fix this case by using useRef() or createRef() instead. ' + 'Learn more about using refs safely here: ' + 'https://reactjs.org/link/strict-mode-string-ref', componentName, config.ref);
@@ -986,7 +966,7 @@ function mapIntoArray(children, array, escapedPrefix, nameSoFar, callback) {
 
     var childKey = nameSoFar === '' ? SEPARATOR + getElementKey(_child, 0) : nameSoFar;
 
-    if (isArray(mappedChild)) {
+    if (Array.isArray(mappedChild)) {
       var escapedChildKey = '';
 
       if (childKey != null) {
@@ -1017,7 +997,7 @@ function mapIntoArray(children, array, escapedPrefix, nameSoFar, callback) {
 
   var nextNamePrefix = nameSoFar === '' ? SEPARATOR : nameSoFar + SUBSEPARATOR;
 
-  if (isArray(children)) {
+  if (Array.isArray(children)) {
     for (var i = 0; i < children.length; i++) {
       child = children[i];
       nextName = nextNamePrefix + getElementKey(child, i);
@@ -1163,11 +1143,20 @@ function onlyChild(children) {
   return children;
 }
 
-function createContext(defaultValue) {
-  // TODO: Second argument used to be an optional `calculateChangedBits`
-  // function. Warn to reserve for future use?
+function createContext(defaultValue, calculateChangedBits) {
+  if (calculateChangedBits === undefined) {
+    calculateChangedBits = null;
+  } else {
+    {
+      if (calculateChangedBits !== null && typeof calculateChangedBits !== 'function') {
+        error('createContext: Expected the optional second argument to be a ' + 'function. Instead received: %s', calculateChangedBits);
+      }
+    }
+  }
+
   var context = {
     $$typeof: REACT_CONTEXT_TYPE,
+    _calculateChangedBits: calculateChangedBits,
     // As a workaround to support multiple concurrent renderers, we categorize
     // some renderers as primary and others as secondary. We only expect
     // there to be two concurrent renderers at most: React Native (primary) and
@@ -1196,7 +1185,8 @@ function createContext(defaultValue) {
     // warn for the incorrect usage of Context as a Consumer.
     var Consumer = {
       $$typeof: REACT_CONTEXT_TYPE,
-      _context: context
+      _context: context,
+      _calculateChangedBits: context._calculateChangedBits
     }; // $FlowFixMe: Flow complains about not setting a value, which is intentional here
 
     Object.defineProperties(Consumer, {
@@ -1409,15 +1399,9 @@ function forwardRef(render) {
         return ownName;
       },
       set: function (name) {
-        ownName = name; // The inner component shouldn't inherit this display name in most cases,
-        // because the component may be used elsewhere.
-        // But it's nice for anonymous functions to inherit the name,
-        // so that our component-stack generation logic will display their frames.
-        // An anonymous function generally suggests a pattern like:
-        //   React.forwardRef((props, ref) => {...});
-        // This kind of inner function is not used elsewhere so the side effect is okay.
+        ownName = name;
 
-        if (!render.name && !render.displayName) {
+        if (render.displayName == null) {
           render.displayName = name;
         }
       }
@@ -1431,28 +1415,18 @@ function forwardRef(render) {
 
 var enableScopeAPI = false; // Experimental Create Event Handle API.
 
-var REACT_MODULE_REFERENCE = 0;
-
-if (typeof Symbol === 'function') {
-  REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
-}
-
 function isValidElementType(type) {
   if (typeof type === 'string' || typeof type === 'function') {
     return true;
   } // Note: typeof might be other than 'symbol' or 'number' (e.g. if it's a polyfill).
 
 
-  if (type === exports.Fragment || type === exports.Profiler || type === exports.unstable_DebugTracingMode || type === exports.StrictMode || type === exports.Suspense || type === exports.SuspenseList || type === exports.unstable_LegacyHidden || enableScopeAPI  ||  type === exports.unstable_Cache) {
+  if (type === exports.Fragment || type === exports.Profiler || type === exports.unstable_DebugTracingMode || type === exports.StrictMode || type === exports.Suspense || type === exports.unstable_SuspenseList || type === exports.unstable_LegacyHidden || enableScopeAPI ) {
     return true;
   }
 
   if (typeof type === 'object' && type !== null) {
-    if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || // This needs to include all possible module reference object
-    // types supported by any Flight configuration anywhere since
-    // we don't know which Flight build this will end up being used
-    // with.
-    type.$$typeof === REACT_MODULE_REFERENCE || type.getModuleId !== undefined) {
+    if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || type.$$typeof === REACT_FUNDAMENTAL_TYPE || type.$$typeof === REACT_BLOCK_TYPE || type[0] === REACT_SERVER_BLOCK_TYPE) {
       return true;
     }
   }
@@ -1482,15 +1456,9 @@ function memo(type, compare) {
         return ownName;
       },
       set: function (name) {
-        ownName = name; // The inner component shouldn't inherit this display name in most cases,
-        // because the component may be used elsewhere.
-        // But it's nice for anonymous functions to inherit the name,
-        // so that our component-stack generation logic will display their frames.
-        // An anonymous function generally suggests a pattern like:
-        //   React.memo((props) => {...});
-        // This kind of inner function is not used elsewhere so the side effect is okay.
+        ownName = name;
 
-        if (!type.name && !type.displayName) {
+        if (type.displayName == null) {
           type.displayName = name;
         }
       }
@@ -1500,31 +1468,90 @@ function memo(type, compare) {
   return elementType;
 }
 
+function lazyInitializer$1(payload) {
+  return {
+    $$typeof: REACT_BLOCK_TYPE,
+    _data: payload.load.apply(null, payload.args),
+    _render: payload.render
+  };
+}
+
+function block(render, load) {
+  {
+    if (load !== undefined && typeof load !== 'function') {
+      error('Blocks require a load function, if provided, but was given %s.', load === null ? 'null' : typeof load);
+    }
+
+    if (render != null && render.$$typeof === REACT_MEMO_TYPE) {
+      error('Blocks require a render function but received a `memo` ' + 'component. Use `memo` on an inner component instead.');
+    } else if (render != null && render.$$typeof === REACT_FORWARD_REF_TYPE) {
+      error('Blocks require a render function but received a `forwardRef` ' + 'component. Use `forwardRef` on an inner component instead.');
+    } else if (typeof render !== 'function') {
+      error('Blocks require a render function but was given %s.', render === null ? 'null' : typeof render);
+    } else if (render.length !== 0 && render.length !== 2) {
+      // Warn if it's not accepting two args.
+      // Do not warn for 0 arguments because it could be due to usage of the 'arguments' object.
+      error('Block render functions accept exactly two parameters: props and data. %s', render.length === 1 ? 'Did you forget to use the data parameter?' : 'Any additional parameter will be undefined.');
+    }
+
+    if (render != null && (render.defaultProps != null || render.propTypes != null)) {
+      error('Block render functions do not support propTypes or defaultProps. ' + 'Did you accidentally pass a React component?');
+    }
+  }
+
+  if (load === undefined) {
+    return function () {
+      var blockComponent = {
+        $$typeof: REACT_BLOCK_TYPE,
+        _data: undefined,
+        // $FlowFixMe: Data must be void in this scenario.
+        _render: render
+      }; // $FlowFixMe: Upstream BlockComponent to Flow as a valid Node.
+
+      return blockComponent;
+    };
+  } // Trick to let Flow refine this.
+
+
+  var loadFn = load;
+  return function () {
+    var args = arguments;
+    var payload = {
+      load: loadFn,
+      args: args,
+      render: render
+    };
+    var lazyType = {
+      $$typeof: REACT_LAZY_TYPE,
+      _payload: payload,
+      _init: lazyInitializer$1
+    }; // $FlowFixMe: Upstream BlockComponent to Flow as a valid Node.
+
+    return lazyType;
+  };
+}
+
 function resolveDispatcher() {
   var dispatcher = ReactCurrentDispatcher.current;
 
-  {
-    if (dispatcher === null) {
-      error('Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for' + ' one of the following reasons:\n' + '1. You might have mismatching versions of React and the renderer (such as React DOM)\n' + '2. You might be breaking the Rules of Hooks\n' + '3. You might have more than one copy of React in the same app\n' + 'See https://reactjs.org/link/invalid-hook-call for tips about how to debug and fix this problem.');
+  if (!(dispatcher !== null)) {
+    {
+      throw Error( "Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:\n1. You might have mismatching versions of React and the renderer (such as React DOM)\n2. You might be breaking the Rules of Hooks\n3. You might have more than one copy of React in the same app\nSee https://reactjs.org/link/invalid-hook-call for tips about how to debug and fix this problem." );
     }
-  } // Will result in a null access error if accessed outside render phase. We
-  // intentionally don't throw our own error because this is in a hot path.
-  // Also helps ensure this is inlined.
-
+  }
 
   return dispatcher;
 }
 
-function getCacheForType(resourceType) {
-  var dispatcher = resolveDispatcher(); // $FlowFixMe This is unstable, thus optional
-
-  return dispatcher.getCacheForType(resourceType);
-}
-function useContext(Context) {
+function useContext(Context, unstable_observedBits) {
   var dispatcher = resolveDispatcher();
 
   {
-    // TODO: add a more generic warning for invalid values.
+    if (unstable_observedBits !== undefined) {
+      error('useContext() second argument is reserved for future ' + 'use in React. Passing it is not supported. ' + 'You passed: %s.%s', unstable_observedBits, typeof unstable_observedBits === 'number' && Array.isArray(arguments[2]) ? '\n\nDid you call array.map(useContext)? ' + 'Calling Hooks inside a loop is not supported. ' + 'Learn more at https://reactjs.org/link/rules-of-hooks' : '');
+    } // TODO: add a more generic warning for invalid values.
+
+
     if (Context._context !== undefined) {
       var realContext = Context._context; // Don't deduplicate because this legitimately causes bugs
       // and nobody should be using this in existing code.
@@ -1537,7 +1564,7 @@ function useContext(Context) {
     }
   }
 
-  return dispatcher.useContext(Context);
+  return dispatcher.useContext(Context, unstable_observedBits);
 }
 function useState(initialState) {
   var dispatcher = resolveDispatcher();
@@ -1592,11 +1619,6 @@ function useOpaqueIdentifier() {
 function useMutableSource(source, getSnapshot, subscribe) {
   var dispatcher = resolveDispatcher();
   return dispatcher.useMutableSource(source, getSnapshot, subscribe);
-}
-function useCacheRefresh() {
-  var dispatcher = resolveDispatcher(); // $FlowFixMe This is unstable, thus optional
-
-  return dispatcher.useCacheRefresh();
 }
 
 // Helpers to patch console.logs to avoid logging during side-effect free
@@ -1721,7 +1743,7 @@ var componentFrameCache;
 
 function describeNativeComponentFrame(fn, construct) {
   // If something asked for a stack inside a fake render, it should get ignored.
-  if ( !fn || reentry) {
+  if (!fn || reentry) {
     return '';
   }
 
@@ -1902,7 +1924,7 @@ function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
     case exports.Suspense:
       return describeBuiltInComponentFrame('Suspense');
 
-    case exports.SuspenseList:
+    case exports.unstable_SuspenseList:
       return describeBuiltInComponentFrame('SuspenseList');
   }
 
@@ -1914,6 +1936,9 @@ function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
       case REACT_MEMO_TYPE:
         // Memo may contain any component type so we recursively resolve it.
         return describeUnknownElementTypeFrameInDEV(type.type, source, ownerFn);
+
+      case REACT_BLOCK_TYPE:
+        return describeFunctionComponentFrame(type._render);
 
       case REACT_LAZY_TYPE:
         {
@@ -1950,7 +1975,7 @@ function setCurrentlyValidatingElement(element) {
 function checkPropTypes(typeSpecs, values, location, componentName, element) {
   {
     // $FlowFixMe This is okay but Flow doesn't know it.
-    var has = Function.call.bind(hasOwnProperty);
+    var has = Function.call.bind(Object.prototype.hasOwnProperty);
 
     for (var typeSpecName in typeSpecs) {
       if (has(typeSpecs, typeSpecName)) {
@@ -2015,7 +2040,7 @@ var propTypesMisspellWarningShown;
 
 function getDeclarationErrorAddendum() {
   if (ReactCurrentOwner.current) {
-    var name = getComponentNameFromType(ReactCurrentOwner.current.type);
+    var name = getComponentName(ReactCurrentOwner.current.type);
 
     if (name) {
       return '\n\nCheck the render method of `' + name + '`.';
@@ -2097,7 +2122,7 @@ function validateExplicitKey(element, parentType) {
 
   if (element && element._owner && element._owner !== ReactCurrentOwner.current) {
     // Give the component that originally created this child.
-    childOwner = " It was passed a child from " + getComponentNameFromType(element._owner.type) + ".";
+    childOwner = " It was passed a child from " + getComponentName(element._owner.type) + ".";
   }
 
   {
@@ -2124,7 +2149,7 @@ function validateChildKeys(node, parentType) {
     return;
   }
 
-  if (isArray(node)) {
+  if (Array.isArray(node)) {
     for (var i = 0; i < node.length; i++) {
       var child = node[i];
 
@@ -2186,12 +2211,12 @@ function validatePropTypes(element) {
 
     if (propTypes) {
       // Intentionally inside to avoid triggering lazy initializers:
-      var name = getComponentNameFromType(type);
+      var name = getComponentName(type);
       checkPropTypes(propTypes, element.props, 'prop', name, element);
     } else if (type.PropTypes !== undefined && !propTypesMisspellWarningShown) {
       propTypesMisspellWarningShown = true; // Intentionally inside to avoid triggering lazy initializers:
 
-      var _name = getComponentNameFromType(type);
+      var _name = getComponentName(type);
 
       error('Component %s declared `PropTypes` instead of `propTypes`. Did you misspell the property assignment?', _name || 'Unknown');
     }
@@ -2256,10 +2281,10 @@ function createElementWithValidation(type, props, children) {
 
     if (type === null) {
       typeString = 'null';
-    } else if (isArray(type)) {
+    } else if (Array.isArray(type)) {
       typeString = 'array';
     } else if (type !== undefined && type.$$typeof === REACT_ELEMENT_TYPE) {
-      typeString = "<" + (getComponentNameFromType(type.type) || 'Unknown') + " />";
+      typeString = "<" + (getComponentName(type.type) || 'Unknown') + " />";
       info = ' Did you accidentally export a JSX literal instead of a component?';
     } else {
       typeString = typeof type;
@@ -2345,14 +2370,23 @@ function createMutableSource(source, getVersion) {
 
   {
     mutableSource._currentPrimaryRenderer = null;
-    mutableSource._currentSecondaryRenderer = null; // Used to detect side effects that update a mutable source during render.
-    // See https://github.com/facebook/react/issues/19948
-
-    mutableSource._currentlyRenderingFiber = null;
-    mutableSource._initialVersionAsOfFirstRender = null;
+    mutableSource._currentSecondaryRenderer = null;
   }
 
   return mutableSource;
+}
+
+{
+
+  try {
+    var frozenObject = Object.freeze({});
+    /* eslint-disable no-new */
+
+    new Map([[frozenObject, null]]);
+    new Set([frozenObject]);
+    /* eslint-enable no-new */
+  } catch (e) {
+  }
 }
 
 function startTransition(scope) {
@@ -2390,16 +2424,16 @@ exports.forwardRef = forwardRef;
 exports.isValidElement = isValidElement;
 exports.lazy = lazy;
 exports.memo = memo;
-exports.startTransition = startTransition;
+exports.unstable_block = block;
 exports.unstable_createMutableSource = createMutableSource;
-exports.unstable_getCacheForType = getCacheForType;
-exports.unstable_useCacheRefresh = useCacheRefresh;
+exports.unstable_startTransition = startTransition;
+exports.unstable_useDeferredValue = useDeferredValue;
 exports.unstable_useMutableSource = useMutableSource;
 exports.unstable_useOpaqueIdentifier = useOpaqueIdentifier;
+exports.unstable_useTransition = useTransition;
 exports.useCallback = useCallback;
 exports.useContext = useContext;
 exports.useDebugValue = useDebugValue;
-exports.useDeferredValue = useDeferredValue;
 exports.useEffect = useEffect;
 exports.useImperativeHandle = useImperativeHandle;
 exports.useLayoutEffect = useLayoutEffect;
@@ -2407,7 +2441,6 @@ exports.useMemo = useMemo;
 exports.useReducer = useReducer;
 exports.useRef = useRef;
 exports.useState = useState;
-exports.useTransition = useTransition;
 exports.version = ReactVersion;
   })();
 }

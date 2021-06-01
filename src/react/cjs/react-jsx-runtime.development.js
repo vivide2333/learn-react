@@ -33,12 +33,14 @@ var REACT_SUSPENSE_TYPE = 0xead1;
 var REACT_SUSPENSE_LIST_TYPE = 0xead8;
 var REACT_MEMO_TYPE = 0xead3;
 var REACT_LAZY_TYPE = 0xead4;
+var REACT_BLOCK_TYPE = 0xead9;
+var REACT_SERVER_BLOCK_TYPE = 0xeada;
+var REACT_FUNDAMENTAL_TYPE = 0xead5;
 var REACT_SCOPE_TYPE = 0xead7;
 var REACT_OPAQUE_ID_TYPE = 0xeae0;
 var REACT_DEBUG_TRACING_MODE_TYPE = 0xeae1;
 var REACT_OFFSCREEN_TYPE = 0xeae2;
 var REACT_LEGACY_HIDDEN_TYPE = 0xeae3;
-var REACT_CACHE_TYPE = 0xeae4;
 
 if (typeof Symbol === 'function' && Symbol.for) {
   var symbolFor = Symbol.for;
@@ -54,12 +56,14 @@ if (typeof Symbol === 'function' && Symbol.for) {
   REACT_SUSPENSE_LIST_TYPE = symbolFor('react.suspense_list');
   REACT_MEMO_TYPE = symbolFor('react.memo');
   REACT_LAZY_TYPE = symbolFor('react.lazy');
+  REACT_BLOCK_TYPE = symbolFor('react.block');
+  REACT_SERVER_BLOCK_TYPE = symbolFor('react.server.block');
+  REACT_FUNDAMENTAL_TYPE = symbolFor('react.fundamental');
   REACT_SCOPE_TYPE = symbolFor('react.scope');
   REACT_OPAQUE_ID_TYPE = symbolFor('react.opaque.id');
   REACT_DEBUG_TRACING_MODE_TYPE = symbolFor('react.debug_trace_mode');
   REACT_OFFSCREEN_TYPE = symbolFor('react.offscreen');
   REACT_LEGACY_HIDDEN_TYPE = symbolFor('react.legacy_hidden');
-  REACT_CACHE_TYPE = symbolFor('react.cache');
 }
 
 var MAYBE_ITERATOR_SYMBOL = typeof Symbol === 'function' && Symbol.iterator;
@@ -118,28 +122,18 @@ function printWarning(level, format, args) {
 
 var enableScopeAPI = false; // Experimental Create Event Handle API.
 
-var REACT_MODULE_REFERENCE = 0;
-
-if (typeof Symbol === 'function') {
-  REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
-}
-
 function isValidElementType(type) {
   if (typeof type === 'string' || typeof type === 'function') {
     return true;
   } // Note: typeof might be other than 'symbol' or 'number' (e.g. if it's a polyfill).
 
 
-  if (type === exports.Fragment || type === REACT_PROFILER_TYPE || type === REACT_DEBUG_TRACING_MODE_TYPE || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || type === REACT_SUSPENSE_LIST_TYPE || type === REACT_LEGACY_HIDDEN_TYPE || enableScopeAPI  ||  type === REACT_CACHE_TYPE) {
+  if (type === exports.Fragment || type === REACT_PROFILER_TYPE || type === REACT_DEBUG_TRACING_MODE_TYPE || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || type === REACT_SUSPENSE_LIST_TYPE || type === REACT_LEGACY_HIDDEN_TYPE || enableScopeAPI ) {
     return true;
   }
 
   if (typeof type === 'object' && type !== null) {
-    if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || // This needs to include all possible module reference object
-    // types supported by any Flight configuration anywhere since
-    // we don't know which Flight build this will end up being used
-    // with.
-    type.$$typeof === REACT_MODULE_REFERENCE || type.getModuleId !== undefined) {
+    if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || type.$$typeof === REACT_FUNDAMENTAL_TYPE || type.$$typeof === REACT_BLOCK_TYPE || type[0] === REACT_SERVER_BLOCK_TYPE) {
       return true;
     }
   }
@@ -148,23 +142,15 @@ function isValidElementType(type) {
 }
 
 function getWrappedName(outerType, innerType, wrapperName) {
-  var displayName = outerType.displayName;
-
-  if (displayName) {
-    return displayName;
-  }
-
   var functionName = innerType.displayName || innerType.name || '';
-  return functionName !== '' ? wrapperName + "(" + functionName + ")" : wrapperName;
-} // Keep in sync with react-reconciler/getComponentNameFromFiber
-
+  return outerType.displayName || (functionName !== '' ? wrapperName + "(" + functionName + ")" : wrapperName);
+}
 
 function getContextName(type) {
   return type.displayName || 'Context';
-} // Note that the reconciler package should generally prefer to use getComponentNameFromFiber() instead.
+}
 
-
-function getComponentNameFromType(type) {
+function getComponentName(type) {
   if (type == null) {
     // Host root, text node or just invalid type.
     return null;
@@ -172,7 +158,7 @@ function getComponentNameFromType(type) {
 
   {
     if (typeof type.tag === 'number') {
-      error('Received an unexpected object in getComponentNameFromType(). ' + 'This is likely a bug in React. Please file an issue.');
+      error('Received an unexpected object in getComponentName(). ' + 'This is likely a bug in React. Please file an issue.');
     }
   }
 
@@ -202,9 +188,6 @@ function getComponentNameFromType(type) {
 
     case REACT_SUSPENSE_LIST_TYPE:
       return 'SuspenseList';
-
-    case REACT_CACHE_TYPE:
-      return 'Cache';
   }
 
   if (typeof type === 'object') {
@@ -221,13 +204,10 @@ function getComponentNameFromType(type) {
         return getWrappedName(type, type.render, 'ForwardRef');
 
       case REACT_MEMO_TYPE:
-        var outerName = type.displayName || null;
+        return getComponentName(type.type);
 
-        if (outerName !== null) {
-          return outerName;
-        }
-
-        return getComponentNameFromType(type.type) || 'Memo';
+      case REACT_BLOCK_TYPE:
+        return getComponentName(type._render);
 
       case REACT_LAZY_TYPE:
         {
@@ -236,7 +216,7 @@ function getComponentNameFromType(type) {
           var init = lazyComponent._init;
 
           try {
-            return getComponentNameFromType(init(payload));
+            return getComponentName(init(payload));
           } catch (x) {
             return null;
           }
@@ -369,7 +349,7 @@ var componentFrameCache;
 
 function describeNativeComponentFrame(fn, construct) {
   // If something asked for a stack inside a fake render, it should get ignored.
-  if ( !fn || reentry) {
+  if (!fn || reentry) {
     return '';
   }
 
@@ -563,6 +543,9 @@ function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
         // Memo may contain any component type so we recursively resolve it.
         return describeUnknownElementTypeFrameInDEV(type.type, source, ownerFn);
 
+      case REACT_BLOCK_TYPE:
+        return describeFunctionComponentFrame(type._render);
+
       case REACT_LAZY_TYPE:
         {
           var lazyComponent = type;
@@ -579,8 +562,6 @@ function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
 
   return '';
 }
-
-var hasOwnProperty = Object.prototype.hasOwnProperty;
 
 var loggedTypeFailures = {};
 var ReactDebugCurrentFrame = ReactSharedInternals.ReactDebugCurrentFrame;
@@ -600,7 +581,7 @@ function setCurrentlyValidatingElement(element) {
 function checkPropTypes(typeSpecs, values, location, componentName, element) {
   {
     // $FlowFixMe This is okay but Flow doesn't know it.
-    var has = Function.call.bind(hasOwnProperty);
+    var has = Function.call.bind(Object.prototype.hasOwnProperty);
 
     for (var typeSpecName in typeSpecs) {
       if (has(typeSpecs, typeSpecName)) {
@@ -645,13 +626,8 @@ function checkPropTypes(typeSpecs, values, location, componentName, element) {
   }
 }
 
-var isArrayImpl = Array.isArray; // eslint-disable-next-line no-redeclare
-
-function isArray(a) {
-  return isArrayImpl(a);
-}
-
 var ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
+var hasOwnProperty = Object.prototype.hasOwnProperty;
 var RESERVED_PROPS = {
   key: true,
   ref: true,
@@ -697,10 +673,10 @@ function hasValidKey(config) {
 function warnIfStringRefCannotBeAutoConverted(config, self) {
   {
     if (typeof config.ref === 'string' && ReactCurrentOwner.current && self && ReactCurrentOwner.current.stateNode !== self) {
-      var componentName = getComponentNameFromType(ReactCurrentOwner.current.type);
+      var componentName = getComponentName(ReactCurrentOwner.current.type);
 
       if (!didWarnAboutStringRefs[componentName]) {
-        error('Component "%s" contains the string ref "%s". ' + 'Support for string refs will be removed in a future major release. ' + 'This case cannot be automatically converted to an arrow function. ' + 'We ask you to manually fix this case by using useRef() or createRef() instead. ' + 'Learn more about using refs safely here: ' + 'https://reactjs.org/link/strict-mode-string-ref', getComponentNameFromType(ReactCurrentOwner.current.type), config.ref);
+        error('Component "%s" contains the string ref "%s". ' + 'Support for string refs will be removed in a future major release. ' + 'This case cannot be automatically converted to an arrow function. ' + 'We ask you to manually fix this case by using useRef() or createRef() instead. ' + 'Learn more about using refs safely here: ' + 'https://reactjs.org/link/strict-mode-string-ref', getComponentName(ReactCurrentOwner.current.type), config.ref);
 
         didWarnAboutStringRefs[componentName] = true;
       }
@@ -913,7 +889,6 @@ var propTypesMisspellWarningShown;
  * @final
  */
 
-
 function isValidElement(object) {
   {
     return typeof object === 'object' && object !== null && object.$$typeof === REACT_ELEMENT_TYPE;
@@ -923,7 +898,7 @@ function isValidElement(object) {
 function getDeclarationErrorAddendum() {
   {
     if (ReactCurrentOwner$1.current) {
-      var name = getComponentNameFromType(ReactCurrentOwner$1.current.type);
+      var name = getComponentName(ReactCurrentOwner$1.current.type);
 
       if (name) {
         return '\n\nCheck the render method of `' + name + '`.';
@@ -1003,7 +978,7 @@ function validateExplicitKey(element, parentType) {
 
     if (element && element._owner && element._owner !== ReactCurrentOwner$1.current) {
       // Give the component that originally created this child.
-      childOwner = " It was passed a child from " + getComponentNameFromType(element._owner.type) + ".";
+      childOwner = " It was passed a child from " + getComponentName(element._owner.type) + ".";
     }
 
     setCurrentlyValidatingElement$1(element);
@@ -1030,7 +1005,7 @@ function validateChildKeys(node, parentType) {
       return;
     }
 
-    if (isArray(node)) {
+    if (Array.isArray(node)) {
       for (var i = 0; i < node.length; i++) {
         var child = node[i];
 
@@ -1093,12 +1068,12 @@ function validatePropTypes(element) {
 
     if (propTypes) {
       // Intentionally inside to avoid triggering lazy initializers:
-      var name = getComponentNameFromType(type);
+      var name = getComponentName(type);
       checkPropTypes(propTypes, element.props, 'prop', name, element);
     } else if (type.PropTypes !== undefined && !propTypesMisspellWarningShown) {
       propTypesMisspellWarningShown = true; // Intentionally inside to avoid triggering lazy initializers:
 
-      var _name = getComponentNameFromType(type);
+      var _name = getComponentName(type);
 
       error('Component %s declared `PropTypes` instead of `propTypes`. Did you misspell the property assignment?', _name || 'Unknown');
     }
@@ -1165,10 +1140,10 @@ function jsxWithValidation(type, props, key, isStaticChildren, source, self) {
 
       if (type === null) {
         typeString = 'null';
-      } else if (isArray(type)) {
+      } else if (Array.isArray(type)) {
         typeString = 'array';
       } else if (type !== undefined && type.$$typeof === REACT_ELEMENT_TYPE) {
-        typeString = "<" + (getComponentNameFromType(type.type) || 'Unknown') + " />";
+        typeString = "<" + (getComponentName(type.type) || 'Unknown') + " />";
         info = ' Did you accidentally export a JSX literal instead of a component?';
       } else {
         typeString = typeof type;
@@ -1194,7 +1169,7 @@ function jsxWithValidation(type, props, key, isStaticChildren, source, self) {
 
       if (children !== undefined) {
         if (isStaticChildren) {
-          if (isArray(children)) {
+          if (Array.isArray(children)) {
             for (var i = 0; i < children.length; i++) {
               validateChildKeys(children[i], type);
             }

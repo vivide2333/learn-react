@@ -49,8 +49,11 @@ class AppWrapper extends React.Component {
   render() {
     console.log('Appwrapper, render')
     return <div>
-      <h2>i m wrapper</h2>
-      <App />
+      <h2>
+        i m wrapper
+      </h2>
+      <App key="a"/>
+      <App key="b"/>
     </div>
   }
 }
